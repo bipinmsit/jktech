@@ -92,14 +92,10 @@ async def query_document(query: str, db: AsyncSession = Depends(get_db)):
     try:
         # Call LLM to get answer from doc.content
         answer = generate_answer_with_llm(context=doc.content, question=query)
-    except RateLimitError:
-        raise HTTPException(
-            status_code=429,
-            detail="OpenAI API rate limit exceeded. Please try again later.",
-        )
-    return {"answer": answer}
+    except RateLimitError as e:
+        raise e
 
-    # return {"document": doc.content}
+    return {"answer": answer}
 
 
 @router.get("/documents/")
