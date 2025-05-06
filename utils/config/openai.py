@@ -21,7 +21,7 @@ def generate_answer_with_llm(
         try:
             response = openai.ChatCompletion.create(
                 model="gpt-3.5-turbo",
-                # messages=messages,
+                messages=messages,
             )
             return response["choices"][0]["message"]["content"].strip()
         except RateLimitError as e:

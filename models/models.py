@@ -19,5 +19,6 @@ class Document(RequiredField):
     __tablename__ = "documents"
     id = Column(Integer, primary_key=True, index=True)
     content = Column(String, nullable=False)
+    name = Column(String, nullable=False)
     # embedding = Column(ARRAY(Float), nullable=False)
     embedding = Column(Vector(384))  # Adjust the dimension to match your embedding size

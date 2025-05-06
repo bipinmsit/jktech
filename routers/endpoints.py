@@ -59,7 +59,7 @@ async def ingest_document(
 
     embedding = generate_embedding(text)
 
-    doc = Document(content=text, embedding=embedding)
+    doc = Document(name=file.filename, content=text, embedding=embedding)
     db.add(doc)
     db.commit()
     db.refresh(doc)
@@ -111,4 +111,6 @@ def list_documents(
 ):
     result = db.execute(select(Document))
     documents = result.scalars().all()
-    return [{"id": doc.id, "content": doc.content} for doc in documents]
+    return [
+        {"id": doc.id, "name": doc.name, "content": doc.content} for doc in documents
+    ]
