@@ -11,7 +11,8 @@ from utils.config.logger import logger
 
 origins = [
     "http://localhost",
-    "http://localhost:5173",
+    "http://localhost:4200",
+    "http://localhost:5432",
 ]
 
 app = FastAPI(debug=True)

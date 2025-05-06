@@ -8,8 +8,6 @@ openai.api_key = secret_key
 
 openai.logging = "debug"
 
-print("ddddddddddddddd", openai.Model.list())
-
 
 def generate_answer_with_llm(
     context: str, question: str, retries: int = 3, delay: int = 5

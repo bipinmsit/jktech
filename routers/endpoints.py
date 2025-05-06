@@ -13,6 +13,7 @@ import fitz
 from sqlalchemy.sql import text
 from utils.config.openai import generate_answer_with_llm
 from openai.error import RateLimitError
+from routers.auth import get_current_user
 
 router = APIRouter(prefix="/api", tags=["api"])
 
@@ -36,7 +37,9 @@ def generate_embedding(text: str):
 
 @router.post("/ingest/")
 async def ingest_document(
-    file: UploadFile = File(...), db: AsyncSession = Depends(get_db)
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
 ):
     content = await file.read()
 
@@ -64,7 +67,11 @@ async def ingest_document(
 
 
 @router.post("/query/")
-async def query_document(query: str, db: AsyncSession = Depends(get_db)):
+async def query_document(
+    query: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
     query_embedding = generate_embedding(query)
     print("Query embedding shape:", len(query_embedding))  # Debugging
     # print("Query embedding type:", type(query_embedding))  # Debugging
@@ -99,7 +106,9 @@ async def query_document(query: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/documents/")
-def list_documents(db: Session = Depends(get_db)):
+def list_documents(
+    db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)
+):
     result = db.execute(select(Document))
     documents = result.scalars().all()
     return [{"id": doc.id, "content": doc.content} for doc in documents]

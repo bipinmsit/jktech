@@ -11,8 +11,8 @@ from passlib.context import CryptContext
 from jose.exceptions import JWTError
 import logging
 
-SECRET_KEY = ""
-ALGORITHM = ""
+SECRET_KEY = "96ff43373544ebcc0035be313c7ad4bd5e1c4a77cb62d5c5287123f9cfb62537"
+ALGORITHM = "HS256"
 
 # create router
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -121,6 +121,11 @@ def get_current_user(
             raise credentials_exception
 
         user = db.query(User).filter(User.id == user_id).first()
+
+        # user = db.query(User).filter(User.id == user_id).first()
+        # if user is None or user.role != "admin":  # Example role check
+        #     raise credentials_exception
+        
         if user is None:
             raise credentials_exception
 
