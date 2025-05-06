@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 from sqlalchemy import select
+from typing import List
 from utils.config.logger import logger
 from fastapi import UploadFile, File, HTTPException, Depends, APIRouter, HTTPException
 from sqlalchemy.orm import Session
@@ -10,10 +11,11 @@ import torch
 from postgres.database import get_db
 from models.models import Document
 import fitz
-from sqlalchemy.sql import text
+from sqlalchemy.sql import text, func
 from utils.config.openai import generate_answer_with_llm
 from openai.error import RateLimitError
 from routers.auth import get_current_user
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 router = APIRouter(prefix="/api", tags=["api"])
 
@@ -28,18 +30,39 @@ tokenizer = AutoTokenizer.from_pretrained("sentence-transformers/all-MiniLM-L6-v
 model = AutoModel.from_pretrained("sentence-transformers/all-MiniLM-L6-v2")
 
 
-def generate_embedding(text: str):
-    tokens = tokenizer(text, return_tensors="pt", padding=True, truncation=True)
+def chunk_text(text: str) -> List[str]:
+    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+    return splitter.split_text(text)
+
+
+def generate_embedding(text: str) -> list:
+    tokens = tokenizer(
+        text, return_tensors="pt", padding=True, truncation=True, max_length=512
+    )
+
     with torch.no_grad():
-        embedding = model(**tokens).last_hidden_state.mean(dim=1)
-    return embedding.squeeze().numpy().tolist()  # Ensure it's a 1D list
+        outputs = model(**tokens)
+
+    # Proper mean pooling with attention mask
+    attention_mask = tokens["attention_mask"]
+    embeddings = outputs.last_hidden_state * attention_mask.unsqueeze(-1)
+    sum_embeddings = embeddings.sum(dim=1)
+    sum_mask = attention_mask.sum(dim=1).unsqueeze(-1)
+
+    # Final embedding calculation
+    embedding = (sum_embeddings / sum_mask).squeeze()
+
+    # Verify dimension (all-MiniLM-L6-v2 should output 384 dimensions)
+    print(f"Embedding dimension: {len(embedding)}")  # Should print 384
+
+    return embedding.tolist()  # Keep this conversion
 
 
 @router.post("/ingest/")
 async def ingest_document(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    # current_user: dict = Depends(get_current_user),
 ):
     content = await file.read()
 
@@ -70,39 +93,35 @@ async def ingest_document(
 async def query_document(
     query: str,
     db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    # current_user: dict = Depends(get_current_user),
 ):
-    query_embedding = generate_embedding(query)
-    print("Query embedding shape:", len(query_embedding))  # Debugging
-    # print("Query embedding type:", type(query_embedding))  # Debugging
-    # print("Query embedding:", query_embedding)  # Debugging
-
-    # Dynamically construct the SQL query with placeholders
-    placeholders = ", ".join(
-        [f":query_embedding_{i}" for i in range(len(query_embedding))]
-    )
-    sql = text(
-        f"""
-        SELECT * FROM documents
-        ORDER BY l2_distance(embedding, ARRAY[{placeholders}]::vector) ASC
-        LIMIT 1
-        """
-    )
-
-    # Bind parameters dynamically
-    params = {f"query_embedding_{i}": value for i, value in enumerate(query_embedding)}
-    result = db.execute(sql, params)
-    doc = result.fetchone()
-    if not doc:
-        raise HTTPException(status_code=404, detail="No relevant document found")
-
     try:
-        # Call LLM to get answer from doc.content
-        answer = generate_answer_with_llm(context=doc.content, question=query)
-    except RateLimitError as e:
-        raise e
+        # Generate query embedding
+        query_embedding = generate_embedding(query)
 
-    return {"answer": answer}
+        # Build proper vector query
+        stmt = (
+            select(Document)
+            .order_by(func.l2_distance(Document.embedding, query_embedding))
+            .limit(3)
+        )
+
+        result = await db.execute(stmt)
+        docs = result.scalars().all()
+
+        if not docs:
+            raise HTTPException(status_code=404, detail="No documents found")
+
+        # Generate context from matching documents
+        context = "\n".join([doc.content for doc in docs])
+
+        # Get LLM answer
+        answer = generate_answer_with_llm(context=context, question=query)
+        return {"answer": answer}
+
+    except Exception as e:
+        logger.error(f"Query error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Query failed")
 
 
 @router.get("/documents/")
