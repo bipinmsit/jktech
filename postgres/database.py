@@ -9,9 +9,9 @@ engine = create_engine(DATABASE_URL)
 Session_Local = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
-async def get_db():
-    db = await Session_Local()
+def get_db():
+    db = Session_Local()
     try:
-        yield await db
+        yield db
     finally:
-        await db.close()
+        db.close()
