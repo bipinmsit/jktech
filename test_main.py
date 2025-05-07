@@ -6,7 +6,7 @@ from sqlalchemy.orm import sessionmaker
 from postgres.database import get_db, Base
 
 # Setup a test database
-SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
+SQLALCHEMY_DATABASE_URL = "postgresql://postgres:postgres@localhost/test"
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
 )
